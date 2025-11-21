@@ -6,7 +6,7 @@ This repository contains a **reproducible pipeline** implementing and extending 
 
 We investigate three core aspects of Bayesian prediction in Pólya sequences:
 
-- **Part A (Prior/Posterior Panels)**: Visualize how predictive distributions$P_m(t)$evolve as data accumulate, showing convergence from prior to posterior for different concentrations$\alpha$and thresholds$t$.
+- **Part A (Prior/Posterior Panels)**: Visualize how predictive distributions $P_m(t)$ evolve as data accumulate, showing convergence from prior to posterior for different concentrations$\alpha$and thresholds$t$.
 
 - **Part B (Convergence Diagnostics)**: Assess how rapidly the predictive distribution$P_m$converges to the directing random measure $\tilde{P}$ via grid-based distance metrics (sup-norm $d^{(\infty)}$, RMSE) and visualize predictive path trajectories.
 
