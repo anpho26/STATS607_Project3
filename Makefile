@@ -21,6 +21,7 @@ PRIOR_M_VALUES := 10 100 1000 4000
 RAW_DIR      := results/raw
 FIG_DIR      := results/figures
 SUMMARY_DIR  := results/summary
+PROFILE_DIR  := results/profile
 
 # Convenience stem used by Part B figures/logs
 PARTB_STEM := partB_n$(N)_a$(ALPHA)_seed$(SEED)_$(BASE)
@@ -129,3 +130,61 @@ partC:
 	@mkdir -p $(RAW_DIR) $(FIG_DIR)
 	$(PY) -m src_cli.partc_log_prop26 --alpha $(ALPHA) --t $(TVALS) --n 100 500 1000 --M 400 --seed $(SEED) --base $(BASE)
 	$(PY) -m src_cli.partc_figures_prop26 --csv $(RAW_DIR)/prop26_M400_L50000_a$(ALPHA)_seed$(SEED)_$(BASE).csv --title "Proposition 2.6: α=$(ALPHA), base=$(BASE)"
+
+
+# ------------------------
+# Profiling targets (cProfile)
+# ------------------------
+.PHONY: profile-all profile-partA-prior profile-partA profile-partB profile-partC
+
+profile: profile-partA-prior profile-partA profile-partB profile-partC
+
+# Profile Part A prior panels (n=0, varying M)
+profile-partA-prior:
+	@mkdir -p $(PROFILE_DIR)
+	@echo "[profile] Part A prior panels (n=0)"
+	for m in $(PRIOR_M_VALUES); do \
+	  echo "  profiling parta_panels prior M=$$m"; \
+	  $(PY) -m cProfile -o $(PROFILE_DIR)/parta_prior_M$$m.prof \
+	    -m src_cli.parta_panels \
+	      --base $(BASE) --t $(TVALS) --alpha 1 5 20 \
+	      --n 0 --M $$m --N 2000 --seed $(SEED); \
+	done
+
+# Profile Part A posterior panels (n=100,500,1000)
+profile-partA:
+	@mkdir -p $(PROFILE_DIR)
+	@echo "[profile] Part A posterior panels (n=100,500,1000)"
+	for n in 100 500 1000; do \
+	  echo "  profiling parta_panels n=$$n"; \
+	  $(PY) -m cProfile -o $(PROFILE_DIR)/parta_posterior_n$$n.prof \
+	    -m src_cli.parta_panels \
+	      --base $(BASE) --t $(TVALS) --alpha 1 5 20 \
+	      --n $$n --M 4000 --N 2000 --seed $(SEED); \
+	done
+
+# Profile Part B: logging + figures
+profile-partB:
+	@mkdir -p $(PROFILE_DIR)
+	@echo "[profile] Part B log_convergence"
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partb_log_convergence.prof \
+	  -m src_cli.partb_log_convergence \
+	    --n $(N) --alpha $(ALPHA) --t $(TVALS) --seed $(SEED) --base $(BASE)
+	@echo "[profile] Part B figures"
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partb_figures.prof \
+	  -m src_cli.partb_figures \
+	    --stem $(PARTB_STEM) --title "n=$(N), α=$(ALPHA), base=$(BASE)"
+
+# Profile Part C: logging + figures
+profile-partC:
+	@mkdir -p $(PROFILE_DIR)
+	@echo "[profile] Part C log_prop26"
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_log_prop26.prof \
+	  -m src_cli.partc_log_prop26 \
+	    --alpha $(ALPHA) --t $(TVALS) \
+	    --n 100 500 1000 --M 400 --seed $(SEED) --base $(BASE)
+	@echo "[profile] Part C figures_prop26"
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_figures_prop26.prof \
+	  -m src_cli.partc_figures_prop26 \
+	    --csv $(RAW_DIR)/prop26_M400_L50000_a$(ALPHA)_seed$(SEED)_$(BASE).csv \
+	    --title "Proposition 2.6: α=$(ALPHA), base=$(BASE)"
