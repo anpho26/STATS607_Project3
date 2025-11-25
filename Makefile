@@ -1,6 +1,3 @@
-# =========================
-# Stats 607 Project Makefile
-# =========================
 SHELL := /bin/bash
 .ONESHELL:
 
@@ -89,17 +86,35 @@ test:
 # ------------------------
 help:
 	@echo "Targets:"
-	@echo "  make all       - clean → simulate → analyze → figures (full pipeline)"
-	@echo "  make simulate  - run simulations and save RAW outputs"
-	@echo "  make analyze   - process RAW outputs into summary CSVs"
-	@echo "  make figures   - create all visualizations"
-	@echo "  make clean     - remove generated files"
-	@echo "  make test      - run pytest"
-	@echo "  make help      - this message"
-	@echo "  make partA-prior - Part A prior panels (n=0, M=10,100,1000,4000)"
-	@echo "  make partA       - Part A posterior panels (n=100,500,1000)"
-	@echo "  make partB       - Part B logs + figures"
-	@echo "  make partC       - Part C logs + pooled-Z figure"
+	@echo ""
+	@echo "  Core pipeline:"
+	@echo "    make all            - clean → simulate → analyze → figures (full pipeline)"
+	@echo "    make everything     - alias for 'make all'"
+	@echo "    make simulate       - run simulations and save RAW outputs (Parts B and C)"
+	@echo "    make analyze        - process RAW outputs into summary CSVs"
+	@echo "    make figures        - create all visualizations for Parts A, B, and C"
+	@echo "    make clean          - remove generated files and caches"
+	@echo ""
+	@echo "  Individual parts:"
+	@echo "    make partA-prior    - Part A prior panels (n=0, M=10,100,1000,4000)"
+	@echo "    make partA          - Part A posterior panels (n=100,500,1000)"
+	@echo "    make partB          - Part B logs + convergence/predictive figures"
+	@echo "    make partC          - Part C logs + pooled-Z figure"
+	@echo ""
+	@echo "  Testing and stability:"
+	@echo "    make test           - run pytest test suite"
+	@echo "    make stability-check- regression checks for baseline vs fast backends"
+	@echo ""
+	@echo "  Profiling and performance:"
+	@echo "    make profile        - run cProfile on baseline and optimized Parts A, B, C"
+	@echo "    make complexity     - complexity analysis for Part A (baseline vs fast)"
+	@echo "    make benchmark      - timing comparisons and speedup tables"
+	@echo "    make parallel       - speedup study for parallel Part C backend"
+	@echo "    make bench-baseline - time full baseline pipeline (make all)"
+	@echo "    make bench-optimized- time full pipeline with OPTIMIZED=1"
+	@echo ""
+	@echo "  Misc:"
+	@echo "    make help           - show this help message"
 
 # ------------------------
 # Individual part targets
