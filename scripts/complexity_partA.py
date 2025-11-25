@@ -34,6 +34,7 @@ def run_parta_once(
     M: int,
     N: int,
     seed: int,
+    backend: str,
 ) -> float:
     """Run src_cli.parta_panels once and return wall-clock time (seconds)."""
     cmd = (
@@ -43,6 +44,7 @@ def run_parta_once(
         + ["--M", str(M)]
         + ["--N", str(N)]
         + ["--seed", str(seed)]
+        + ["--backend", backend]
         + ["--alpha", *[str(a) for a in alpha_list]]
         + ["--t", *[str(t) for t in t_vals]]
     )
@@ -110,6 +112,13 @@ def main() -> None:
         help="Number of repetitions per n to average runtime (default: %(default)s).",
     )
     parser.add_argument(
+        "--backends",
+        nargs="+",
+        choices=["baseline", "fast"],
+        default=["baseline"],
+        help="Which backends to benchmark (default: baseline only).",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default="results/summary",
@@ -121,56 +130,68 @@ def main() -> None:
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    print("[complexity A] Running Part A for n values:", n_values)
-    runtimes = []
+    backends = list(dict.fromkeys(args.backends))
 
-    for n in n_values:
-        print(f"  n={n}: ", end="", flush=True)
-        reps_times = []
-        for r in range(args.reps):
-            dt = run_parta_once(
-                n=n,
-                alpha_list=args.alpha,
-                base=args.base,
-                t_vals=args.t,
-                M=args.M,
-                N=args.N,
-                seed=args.seed + r,
-            )
-            reps_times.append(dt)
-            print(f"{dt:.3f}s ", end="", flush=True)
-        avg = float(np.mean(reps_times))
-        runtimes.append(avg)
-        print(f"-> avg {avg:.3f}s")
+    print("[complexity A] Running Part A for n values:", n_values)
+    runtimes_by_backend: dict[str, list[float]] = {be: [] for be in backends}
+
+    for backend in backends:
+        print(f"\n[complexity A] Backend={backend}")
+        for n in n_values:
+            print(f"  n={n}: ", end="", flush=True)
+            reps_times = []
+            for r in range(args.reps):
+                dt = run_parta_once(
+                    n=n,
+                    alpha_list=args.alpha,
+                    base=args.base,
+                    t_vals=args.t,
+                    M=args.M,
+                    N=args.N,
+                    seed=args.seed + r,
+                    backend=backend,
+                )
+                reps_times.append(dt)
+                print(f"{dt:.3f}s ", end="", flush=True)
+            avg = float(np.mean(reps_times))
+            runtimes_by_backend[backend].append(avg)
+            print(f"-> avg {avg:.3f}s")
 
     n_arr = np.array(n_values, dtype=float)
-    t_arr = np.array(runtimes, dtype=float)
 
-    # Fit log–log slope on n>0 (exclude n=0 to avoid log(0))
+    slopes: dict[str, float] = {}
     mask = n_arr > 0
-    logn = np.log(n_arr[mask])
-    logt = np.log(t_arr[mask])
-    slope, intercept = np.polyfit(logn, logt, 1)
+    for backend in backends:
+        t_arr = np.array(runtimes_by_backend[backend], dtype=float)
+        logn = np.log(n_arr[mask])
+        logt = np.log(t_arr[mask])
+        slope, intercept = np.polyfit(logn, logt, 1)
+        slopes[backend] = slope
 
     # Save CSV
     csv_path = outdir / "complexity_partA.csv"
     with csv_path.open("w") as f:
-        f.write("n,runtime_sec\n")
-        for n, t in zip(n_arr, t_arr):
-            f.write(f"{int(n)},{t:.6f}\n")
+        f.write("backend,n,runtime_sec\n")
+        for backend in backends:
+            t_arr = np.array(runtimes_by_backend[backend], dtype=float)
+            for n, t in zip(n_arr, t_arr):
+                f.write(f"{backend},{int(n)},{t:.6f}\n")
     print(f"[complexity A] Wrote CSV to {csv_path}")
 
     # Make log–log plot (skip n=0 in the plot)
     fig_path = outdir / "complexity_partA_loglog.png"
     plt.figure()
-    plt.loglog(n_arr[mask], t_arr[mask], "o-")
+    for backend in backends:
+        t_arr = np.array(runtimes_by_backend[backend], dtype=float)
+        plt.loglog(n_arr[mask], t_arr[mask], "o-", label=f"{backend} (slope≈{slopes[backend]:.2f})")
     plt.xlabel("n (log scale)")
     plt.ylabel("runtime (seconds, log scale)")
     plt.title(
         f"Part A runtime vs n (log–log)\n"
-        f"M={args.M}, alpha={args.alpha}, base={args.base}, slope≈{slope:.2f}"
+        f"M={args.M}, alpha={args.alpha}, base={args.base}"
     )
     plt.grid(True, which="both", ls=":")
+    plt.legend()
     plt.tight_layout()
     plt.savefig(fig_path, dpi=200)
     plt.close()
@@ -178,16 +199,18 @@ def main() -> None:
 
     # Print Markdown table + slope for copy–paste
     print("\nMarkdown table (copy into BASELINE.md):\n")
-    print("| n | Runtime (s) |")
-    print("|---|-------------|")
-    for n, t in zip(n_arr, t_arr):
-        print(f"| {int(n)} | {t:.3f} |")
+    print("| backend | n | Runtime (s) |")
+    print("|---------|---|-------------|")
+    for backend in backends:
+        t_arr = np.array(runtimes_by_backend[backend], dtype=float)
+        for n, t in zip(n_arr, t_arr):
+            print(f"| {backend} | {int(n)} | {t:.3f} |")
 
     print("\nEmpirical log–log fit (excluding n=0):")
-    print(f"- slope ≈ **{slope:.2f}**")
-    print(
-        "  (runtime ≈ C * n^{slope}; slope near 1 indicates approximately O(n) complexity)"
-    )
+    for backend in backends:
+        slope = slopes[backend]
+        print(f"- backend `{backend}`: slope ≈ **{slope:.2f}**")
+    print("  (runtime ≈ C * n^{slope}; slope near 1 indicates approximately O(n) complexity)")
 
 
 if __name__ == "__main__":

@@ -132,59 +132,77 @@ partC:
 	$(PY) -m src_cli.partc_figures_prop26 --csv $(RAW_DIR)/prop26_M400_L50000_a$(ALPHA)_seed$(SEED)_$(BASE).csv --title "Proposition 2.6: α=$(ALPHA), base=$(BASE)"
 
 
-# ------------------------
-# Profiling targets (cProfile)
-# ------------------------
-.PHONY: profile-all profile-partA-prior profile-partA profile-partB profile-partC
 
-profile: profile-partA-prior profile-partA profile-partB profile-partC
+# =====================
+# Unit 3 extra targets
+# =====================
 
-# Profile Part A prior panels (n=0, varying M)
-profile-partA-prior:
+.PHONY: profile complexity benchmark parallel stability-check
+
+# Global profiling directory
+PROFILE_DIR := results/profile
+
+.PHONY: profile
+profile:
 	@mkdir -p $(PROFILE_DIR)
-	@echo "[profile] Part A prior panels (n=0)"
-	for m in $(PRIOR_M_VALUES); do \
-	  echo "  profiling parta_panels prior M=$$m"; \
-	  $(PY) -m cProfile -o $(PROFILE_DIR)/parta_prior_M$$m.prof \
-	    -m src_cli.parta_panels \
-	      --base $(BASE) --t $(TVALS) --alpha 1 5 20 \
-	      --n 0 --M $$m --N 2000 --seed $(SEED); \
-	done
-
-# Profile Part A posterior panels (n=100,500,1000)
-profile-partA:
-	@mkdir -p $(PROFILE_DIR)
-	@echo "[profile] Part A posterior panels (n=100,500,1000)"
-	for n in 100 500 1000; do \
-	  echo "  profiling parta_panels n=$$n"; \
-	  $(PY) -m cProfile -o $(PROFILE_DIR)/parta_posterior_n$$n.prof \
-	    -m src_cli.parta_panels \
-	      --base $(BASE) --t $(TVALS) --alpha 1 5 20 \
-	      --n $$n --M 4000 --N 2000 --seed $(SEED); \
-	done
-
-# Profile Part B: logging + figures
-profile-partB:
-	@mkdir -p $(PROFILE_DIR)
-	@echo "[profile] Part B log_convergence"
+	# Baseline Part A: prior (n=0) and posterior (n=1000) panels
+	$(PY) -m cProfile -o $(PROFILE_DIR)/parta_prior_baseline.prof \
+	  -m src_cli.parta_panels --base $(BASE) --t $(TVALS) \
+	  --alpha 1 5 20 --n 0 --M 4000 --N 2000 --seed $(SEED) --backend baseline
+	$(PY) -m cProfile -o $(PROFILE_DIR)/parta_post_baseline.prof \
+	  -m src_cli.parta_panels --base $(BASE) --t $(TVALS) \
+	  --alpha 1 5 20 --n 1000 --M 4000 --N 2000 --seed $(SEED) --backend baseline
+	# Baseline Part B: convergence logging
 	$(PY) -m cProfile -o $(PROFILE_DIR)/partb_log_convergence.prof \
-	  -m src_cli.partb_log_convergence \
-	    --n $(N) --alpha $(ALPHA) --t $(TVALS) --seed $(SEED) --base $(BASE)
-	@echo "[profile] Part B figures"
-	$(PY) -m cProfile -o $(PROFILE_DIR)/partb_figures.prof \
-	  -m src_cli.partb_figures \
-	    --stem $(PARTB_STEM) --title "n=$(N), α=$(ALPHA), base=$(BASE)"
+	  -m src_cli.partb_log_convergence --n $(N) --alpha $(ALPHA) \
+	  --t $(TVALS) --seed $(SEED) --base $(BASE)
+	# Baseline Part C: Monte Carlo study (single job)
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_log_prop26_baseline.prof \
+	  -m src_cli.partc_log_prop26 --alpha $(ALPHA) --t $(TVALS) \
+	  --n 100 500 1000 --M 400 --seed $(SEED) --base $(BASE) \
+	  --backend baseline --n-jobs 1
+	# Fast Part A: prior and posterior panels
+	$(PY) -m cProfile -o $(PROFILE_DIR)/parta_prior_fast.prof \
+	  -m src_cli.parta_panels --base $(BASE) --t $(TVALS) \
+	  --alpha 1 5 20 --n 0 --M 4000 --N 2000 --seed $(SEED) --backend fast
+	$(PY) -m cProfile -o $(PROFILE_DIR)/parta_post_fast.prof \
+	  -m src_cli.parta_panels --base $(BASE) --t $(TVALS) \
+	  --alpha 1 5 20 --n 1000 --M 4000 --N 2000 --seed $(SEED) --backend fast
+	# Fast Part C: Monte Carlo study (single job to avoid multiprocessing)
+	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_log_prop26_fast.prof \
+	  -m src_cli.partc_log_prop26 --alpha $(ALPHA) --t $(TVALS) \
+	  --n 100 500 1000 --M 400 --seed $(SEED) --base $(BASE) \
+	  --backend fast --n-jobs 1
 
-# Profile Part C: logging + figures
-profile-partC:
-	@mkdir -p $(PROFILE_DIR)
-	@echo "[profile] Part C log_prop26"
-	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_log_prop26.prof \
-	  -m src_cli.partc_log_prop26 \
-	    --alpha $(ALPHA) --t $(TVALS) \
-	    --n 100 500 1000 --M 400 --seed $(SEED) --base $(BASE)
-	@echo "[profile] Part C figures_prop26"
-	$(PY) -m cProfile -o $(PROFILE_DIR)/partc_figures_prop26.prof \
-	  -m src_cli.partc_figures_prop26 \
-	    --csv $(RAW_DIR)/prop26_M400_L50000_a$(ALPHA)_seed$(SEED)_$(BASE).csv \
-	    --title "Proposition 2.6: α=$(ALPHA), base=$(BASE)"
+# Run computational complexity analysis (timing vs n / M) for part A
+complexity:
+	@mkdir -p results/summary
+	$(PY) scripts/complexity_partA.py --backends baseline fast
+
+benchmark:
+	@echo "[benchmark] Part A: baseline vs fast backend"
+	$(PY) scripts/time_parta_backend.py
+	@echo "[benchmark] Part C: baseline vs fast backend at M=400"
+	$(PY) scripts/complexity_partC.py --mode complexity --backends baseline fast --M 400
+	@echo "[benchmark] Part C speedup analysis (fast backend with varying workers)"
+	$(PY) scripts/complexity_partC.py --mode speedup --M 400 --n 100 500 1000 \
+	  --alpha $(ALPHA) --base $(BASE) --t $(TVALS) --seed $(SEED) \
+	  --n-jobs-list 1 2 4
+
+# Run optimized version with parallelization (Part C fast backend, multiple workers)
+parallel:
+	@echo "[parallel] Part C fast backend with parallel jobs"
+	$(PY) scripts/complexity_partC.py \
+	  --mode speedup \
+	  --M 400 \
+	  --n 100 500 1000 \
+	  --alpha $(ALPHA) \
+	  --base $(BASE) \
+	  --t $(TVALS) \
+	  --seed $(SEED) \
+	  --n-jobs-list 1 2 4
+
+# Check for stability / correctness across conditions
+# (runs regression tests: baseline vs fast, plus basic sanity checks)
+stability-check:
+	$(PY) -m scripts.test_regression

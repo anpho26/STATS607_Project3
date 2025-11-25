@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 from src.plotstyle import apply_plot_style
 from scipy.stats import beta
 from src.polya import PolyaSequenceModel, build_prefix, continue_urn_once
+from src.polya_fast import FastPolyaSequenceModel, build_prefix_fast, continue_urn_once_fast
 
-def panel_for_n(n: int, ts: list[float], alphas: list[float], M: int, N: int, base: str, seed: int):
+def panel_for_n(n: int, ts: list[float], alphas: list[float], M: int, N: int, base: str, seed: int, backend: str = "baseline"):
     """Render a grid of panels showing distributions of P((−∞, t]) via Pólya continuation.
 
     Parameters
@@ -25,31 +26,55 @@ def panel_for_n(n: int, ts: list[float], alphas: list[float], M: int, N: int, ba
         Base distribution G0 for the urn (U(0,1) or N(0,1)).
     seed : int
         RNG seed for reproducibility.
+    backend : {"baseline","fast"}
+        Choice of implementation for the Pólya urn. "baseline" uses the original
+        list-based code in src.polya; "fast" uses the optimized numpy-based
+        code in src.polya_fast.
     """
     rng = np.random.default_rng(seed)
-    # Initialize model with first α (will be reassigned inside the loop).
-    model = PolyaSequenceModel(alpha=alphas[0], base=base, rng=rng)  # alpha reassigned below
+    # Choose baseline vs fast backend for the Pólya urn implementation.
+    backend = backend.lower()
+    if backend not in {"baseline", "fast"}:
+        raise ValueError(f"unknown backend={backend!r}; expected 'baseline' or 'fast'")
+    if backend == "baseline":
+        model = PolyaSequenceModel(alpha=alphas[0], base=base, rng=rng)
+        build_prefix_fn = build_prefix
+        continue_fn = continue_urn_once
+    else:  # "fast"
+        model = FastPolyaSequenceModel(alpha=alphas[0], base=base, rng=rng)
+        build_prefix_fn = build_prefix_fast
+        continue_fn = continue_urn_once_fast
     # Observed prefix x_{1:n} used for all panels (same dataset across the grid).
-    x_obs = build_prefix(n, model)
+    x_obs = build_prefix_fn(n, model)
 
     # Figure layout: rows correspond to thresholds t, columns correspond to α.
     R, C = len(ts), len(alphas)
     fig, axes = plt.subplots(R, C, figsize=(12, 8), sharex=True, sharey=False)
     axes = np.atleast_2d(axes)  # normalize shape for R=C=1 case
 
-    for i, t in enumerate(ts):
-        # Sufficient statistic at threshold t: K_n(t) = #{x_i ≤ t} over the prefix.
-        k_n = sum(1 for x in x_obs if x <= t)
+    for j, a in enumerate(alphas):
+        # Update α for this column (reuse same model/RNG).
+        model.alpha = a
 
-        for j, a in enumerate(alphas):
-            # Update α for this column (reuse same model/RNG).
-            model.alpha = a
-            # Monte Carlo: continue the *same* prefix N times up to length M,
-            # record the empirical mass at t for each continuation.
-            post = np.empty(N, dtype=float)
+        if backend == "fast":
+            paths = np.zeros((N, M), dtype=float)
             for r in range(N):
-                traj = continue_urn_once(x_obs, model, M)
-                post[r] = np.mean(np.asarray(traj) <= t)
+                traj = continue_fn(x_obs, model, M)
+                paths[r, :] = traj
+
+        for i, t in enumerate(ts):
+            # Sufficient statistic at threshold t: K_n(t) = #{x_i ≤ t} over the prefix.
+            k_n = sum(1 for x in x_obs if x <= t)
+
+            if backend == "fast":
+                post = np.mean(paths <= t, axis=1)
+            else:
+                # Monte Carlo: continue the *same* prefix N times up to length M,
+                # record the empirical mass at t for each continuation.
+                post = np.empty(N, dtype=float)
+                for r in range(N):
+                    traj = continue_fn(x_obs, model, M)
+                    post[r] = np.mean(np.asarray(traj) <= t)
 
             ax = axes[i, j]
             x = np.linspace(0, 1, 600)
@@ -106,11 +131,13 @@ def main():
     ap.add_argument("--M", type=int, default=1000)
     ap.add_argument("--N", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=20250101)
+    ap.add_argument("--backend", choices=["baseline","fast"], default="baseline",
+                    help="Choice of urn implementation: 'baseline' (lists) or 'fast' (optimized numpy).")
     args = ap.parse_args()
     apply_plot_style()  # apply global rcParams for consistent styling
 
     # Run the panel generator with parsed CLI arguments.
-    panel_for_n(args.n, args.ts, args.alphas, args.M, args.N, args.base, args.seed)
+    panel_for_n(args.n, args.ts, args.alphas, args.M, args.N, args.base, args.seed, backend=args.backend)
 
 if __name__ == "__main__":
     main()
