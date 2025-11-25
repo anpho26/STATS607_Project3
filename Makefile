@@ -206,3 +206,21 @@ parallel:
 # (runs regression tests: baseline vs fast, plus basic sanity checks)
 stability-check:
 	$(PY) -m scripts.test_regression
+
+
+# ------------------------
+# Benchmarking
+# ------------------------
+TIME ?= /usr/bin/time -p
+
+.PHONY: bench-baseline bench-optimized
+
+# Baseline: normal pipeline
+bench-baseline:
+	@echo "[bench-baseline] timing baseline full pipeline (make all)"
+	@$(TIME) $(MAKE) clean all
+
+# Optimized: same pipeline, but with OPTIMIZED=1 in the environment
+bench-optimized:
+	@echo "[bench-optimized] timing optimized full pipeline (make all)"
+	@OPTIMIZED=1 $(TIME) $(MAKE) clean all

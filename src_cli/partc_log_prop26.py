@@ -1,9 +1,9 @@
-
 import argparse
 import math
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from typing import List
+import os
 
 import numpy as np
 import pandas as pd
@@ -257,6 +257,12 @@ def main() -> None:
       and a NumPy-backed urn implementation with the same Monte Carlo logic.
     - The `n_jobs` argument enables parallelization across Monte Carlo replicates.
     """
+    # Choose defaults based on OPTIMIZED environment variable
+    optimized = os.getenv("OPTIMIZED") == "1"
+    default_backend = "fast" if optimized else "baseline"
+    # If optimized, default to 2; otherwise, stay serial
+    default_n_jobs = 2 if optimized else 1
+
     ap = argparse.ArgumentParser(
         description="Prop 2.6 predictive CIs for F~(t), with target via continuation on the SAME urn."
     )
@@ -271,14 +277,14 @@ def main() -> None:
     ap.add_argument(
         "--backend",
         choices=["baseline", "fast"],
-        default="baseline",
-        help="Implementation for the Pólya urn: 'baseline' (lists) or 'fast' (NumPy-backed).",
+        default=default_backend,
+        help="Implementation for the Pólya urn: 'baseline' (lists) or 'fast' (NumPy-backed). Default depends on OPTIMIZED.",
     )
     ap.add_argument(
         "--n-jobs",
         type=int,
-        default=1,
-        help="Number of parallel worker processes for Monte Carlo reps (1 = no parallelism).",
+        default=default_n_jobs,
+        help="Number of parallel worker processes for Monte Carlo reps (1 = no parallelism). Default may be >1 if OPTIMIZED=1.",
     )
     args = ap.parse_args()
 

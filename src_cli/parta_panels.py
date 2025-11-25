@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import argparse, numpy as np
+import os
 import matplotlib.pyplot as plt
 from src.plotstyle import apply_plot_style
 from scipy.stats import beta
@@ -131,13 +132,24 @@ def main():
     ap.add_argument("--M", type=int, default=1000)
     ap.add_argument("--N", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=20250101)
-    ap.add_argument("--backend", choices=["baseline","fast"], default="baseline",
-                    help="Choice of urn implementation: 'baseline' (lists) or 'fast' (optimized numpy).")
-    args = ap.parse_args()
-    apply_plot_style()  # apply global rcParams for consistent styling
 
-    # Run the panel generator with parsed CLI arguments.
-    panel_for_n(args.n, args.ts, args.alphas, args.M, args.N, args.base, args.seed, backend=args.backend)
+    # default backend depends on OPTIMIZED env var
+    default_backend = "fast" if os.getenv("OPTIMIZED") == "1" else "baseline"
+    ap.add_argument(
+        "--backend",
+        choices=["baseline","fast"],
+        default=default_backend,
+        help="Choice of urn implementation: 'baseline' (lists) or 'fast' (optimized numpy).",
+    )
+
+    args = ap.parse_args()
+    apply_plot_style()
+
+    panel_for_n(
+        args.n, args.ts, args.alphas,
+        args.M, args.N, args.base, args.seed,
+        backend=args.backend,
+    )
 
 if __name__ == "__main__":
     main()
